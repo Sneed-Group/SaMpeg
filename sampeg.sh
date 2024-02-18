@@ -1,11 +1,22 @@
 #!/bin/bash
 
+# Function to check if NVENC is supported
+check_nvenc_support() {
+    if ffmpeg -hide_banner -encoders | grep -q "h264_nvenc"; then
+        echo "NVENC encoding supported"
+        return 0
+    else
+        echo "NVENC encoding not supported"
+        return 1
+    fi
+}
+
 # Function to generate concat.txt from a folder
 generate_concat_file() {
     folder="$1"
     output="$2"
     cd "$folder" || exit
-    files=$(ls *.mp4 *.jpg *.jpeg *.png | sort -n)
+    files=$(ls *.mp4 | sort -n)
     for file in $files; do
         echo "file '$folder/$file'" >>"$output"
     done
@@ -16,7 +27,12 @@ generate_concat_file() {
 combine_using_concat_file() {
     concat_file="$1"
     output="$2"
-    ffmpeg -f concat -safe 0 -i "$concat_file" -vf "scale=3840x2160:force_original_aspect_ratio=decrease,pad=3840:2160:(ow-iw)/2:(oh-ih)/2" -c:v libx264 -preset medium -crf 23 -c:a aac -b:a 128k "$output"
+    resolution="${3:-3840x2160}"  # Default resolution is 4k (16:9)
+    if check_nvenc_support; then
+        ffmpeg -f concat -safe 0 -i "$concat_file" -vf "scale=$resolution:force_original_aspect_ratio=decrease,pad=$resolution:(ow-iw)/2:(oh-ih)/2" -c:v h264_nvenc -preset medium -crf 23 -c:a aac -b:a 128k "$output"
+    else
+        ffmpeg -f concat -safe 0 -i "$concat_file" -vf "scale=$resolution:force_original_aspect_ratio=decrease,pad=$resolution:(ow-iw)/2:(oh-ih)/2" -c:v libx264 -preset medium -crf 23 -c:a aac -b:a 128k "$output"
+    fi
     echo "Clips combined and scaled successfully"
 }
 
@@ -28,7 +44,11 @@ crop_clip() {
     height="$4"
     x_position="$5"
     y_position="$6"
-    ffmpeg -i "$input" -vf "crop=$width:$height:$x_position:$y_position" "$output"
+    if check_nvenc_support; then
+        ffmpeg -i "$input" -vf "crop=$width:$height:$x_position:$y_position" -c:v h264_nvenc -preset medium -crf 23 -c:a aac -b:a 128k "$output"
+    else
+        ffmpeg -i "$input" -vf "crop=$width:$height:$x_position:$y_position" -c:v libx264 -preset medium -crf 23 -c:a aac -b:a 128k "$output"
+    fi
     echo "Clip cropped successfully"
 }
 
@@ -37,7 +57,11 @@ trim_beginning() {
     input="$1"
     output="$2"
     start_time="$3"
-    ffmpeg -i "$input" -ss "$start_time" -c copy "$output"
+    if check_nvenc_support; then
+        ffmpeg -i "$input" -ss "$start_time" -c:v h264_nvenc -preset medium -crf 23 -c:a aac -b:a 128k "$output"
+    else
+        ffmpeg -i "$input" -ss "$start_time" -c:v libx264 -preset medium -crf 23 -c:a aac -b:a 128k "$output"
+    fi
     echo "Clip trimmed from beginning successfully"
 }
 
@@ -46,7 +70,11 @@ trim_end() {
     input="$1"
     output="$2"
     end_time="$3"
-    ffmpeg -i "$input" -to "$end_time" -c copy "$output"
+    if check_nvenc_support; then
+        ffmpeg -i "$input" -to "$end_time" -c:v h264_nvenc -preset medium -crf 23 -c:a aac -b:a 128k "$output"
+    else
+        ffmpeg -i "$input" -to "$end_time" -c:v libx264 -preset medium -crf 23 -c:a aac -b:a 128k "$output"
+    fi
     echo "Clip trimmed from end successfully"
 }
 
@@ -54,7 +82,12 @@ trim_end() {
 scale_clip() {
     input="$1"
     output="$2"
-    ffmpeg -i "$input" -vf "scale=3840x2160:force_original_aspect_ratio=decrease,pad=3840:2160:(ow-iw)/2:(oh-ih)/2" "$output"
+    resolution="${3:-3840x2160}"  # Default resolution is 4k (16:9)
+    if check_nvenc_support; then
+        ffmpeg -i "$input" -vf "scale=$resolution:force_original_aspect_ratio=decrease,pad=$resolution:(ow-iw)/2:(oh-ih)/2" -c:v h264_nvenc -preset medium -crf 23 -c:a aac -b:a 128k "$output"
+    else
+        ffmpeg -i "$input" -vf "scale=$resolution:force_original_aspect_ratio=decrease,pad=$resolution:(ow-iw)/2:(oh-ih)/2" -c:v libx264 -preset medium -crf 23 -c:a aac -b:a 128k "$output"
+    fi
     echo "Clip scaled successfully"
 }
 
@@ -69,17 +102,15 @@ remove_silence() {
 # Function to display help message
 display_help() {
     toilet SaMpeg
-    echo "The video fusing interface."
-    echo "Powered by FFmpeg."
-    echo "Version 2.2024-a"
+    echo "Version 1.0"
     echo "------------"
     echo "Usage:"
     echo "  $0 generate-concat-file <folder> <output>"
-    echo "  $0 combine-using-concat-file <concat_file> <output>"
+    echo "  $0 combine-using-concat-file <concat_file> <output> [resolution]"
     echo "  $0 crop <input> <output> <width> <height> <x_position> <y_position>"
     echo "  $0 trim-beginning <input> <output> <start_time>"
     echo "  $0 trim-end <input> <output> <end_time>"
-    echo "  $0 scale <input> <output>"
+    echo "  $0 scale <input> <output> [resolution]"
     echo "  $0 remove-silence <input> <output>"
 }
 
@@ -102,10 +133,10 @@ while [[ $# -gt 0 ]]; do
         ;;
     combine-using-concat-file)
         if [[ $# -lt 3 ]]; then
-            echo "Usage: $0 combine-using-concat-file <concat_file> <output>"
+            echo "Usage: $0 combine-using-concat-file <concat_file> <output> [resolution]"
             exit 1
         fi
-        combine_using_concat_file "$2" "$3"
+        combine_using_concat_file "$2" "$3" "$4"
         ;;
     crop)
         if [[ $# -ne 7 ]]; then
@@ -129,11 +160,11 @@ while [[ $# -gt 0 ]]; do
         trim_end "$2" "$3" "$4"
         ;;
     scale)
-        if [[ $# -ne 3 ]]; then
-            echo "Usage: $0 scale <input> <output>"
+        if [[ $# -lt 3 ]]; then
+            echo "Usage: $0 scale <input> <output> [resolution]"
             exit 1
         fi
-        scale_clip "$2" "$3"
+        scale_clip "$2" "$3" "$4"
         ;;
     remove-silence)
         if [[ $# -ne 3 ]]; then
@@ -154,4 +185,3 @@ while [[ $# -gt 0 ]]; do
     esac
     shift
 done
-
