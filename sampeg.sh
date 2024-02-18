@@ -2,7 +2,7 @@
 
 # Function to check if NVENC is supported
 check_nvenc_support() {
-    if ffmpeg -hide_banner -encoders | grep -q "h264_nvenc"; then
+    if ffmpeg -hide_banner -encoders 2>/dev/null | grep -qE "(nvenc|cuda)"; then
         echo "NVENC encoding supported"
         return 0
     else
@@ -99,6 +99,56 @@ remove_silence() {
     echo "Silence removed successfully"
 }
 
+# Function for picture-in-picture
+picture_in_picture() {
+    input_main="$1"
+    input_pip="$2"
+    output="$3"
+    x_scale="$4"
+    y_scale="$5"
+    x_position="$6"
+    y_position="$7"
+    if check_nvenc_support; then
+        ffmpeg -i "$input_main" -i "$input_pip" -filter_complex "[1:v]scale=$x_scale:$y_scale [pip]; [0:v][pip]overlay=$x_position:$y_position" -c:v h264_nvenc -preset medium -crf 23 -c:a aac -b:a 128k "$output"
+    else
+        ffmpeg -i "$input_main" -i "$input_pip" -filter_complex "[1:v]scale=$x_scale:$y_scale [pip]; [0:v][pip]overlay=$x_position:$y_position" -c:v libx264 -preset medium -crf 23 -c:a aac -b:a 128k "$output"
+    fi
+    echo "Picture-in-picture applied successfully"
+}
+
+# Function for image stabilization
+image_stabilization() {
+    input="$1"
+    output="$2"
+    if check_nvenc_support; then
+        ffmpeg -i "$input" -vf vidstabdetect=shakiness=10:accuracy=15:result=transform.trf -f null -
+        ffmpeg -i "$input" -vf vidstabtransform=input="transform.trf" -c:v h264_nvenc -preset medium -crf 23 -c:a aac -b:a 128k "$output"
+    else
+        ffmpeg -i "$input" -vf vidstabdetect=shakiness=10:accuracy=15:result=transform.trf -f null -
+        ffmpeg -i "$input" -vf vidstabtransform=input="transform.trf" -c:v libx264 -preset medium -crf 23 -c:a aac -b:a 128k "$output"
+    fi
+    echo "Image stabilization applied successfully"
+}
+
+# Function to record screen with optional webcam and microphone
+record_screen() {
+    output="$1"
+    webcam_flag="$2"  # true or false
+    microphone_flag="$3"  # true or false
+    webcam_device="/dev/video0"
+    microphone_device="default"
+    webcam_input=""
+    microphone_input=""
+    if [[ "$webcam_flag" == "true" ]]; then
+        webcam_input="-f v4l2 -i $webcam_device"
+    fi
+    if [[ "$microphone_flag" == "true" ]]; then
+        microphone_input="-f alsa -i $microphone_device"
+    fi
+    ffmpeg -f x11grab -video_size 1920x1080 -framerate 30 -i :0.0 $webcam_input $microphone_input -c:v h264_nvenc -preset medium -crf 23 -c:a aac -b:a 128k "$output"
+    echo "Screen recorded successfully"
+}
+
 # Function to display help message
 display_help() {
     toilet SaMpeg
@@ -112,6 +162,9 @@ display_help() {
     echo "  $0 trim-end <input> <output> <end_time>"
     echo "  $0 scale <input> <output> [resolution]"
     echo "  $0 remove-silence <input> <output>"
+    echo "  $0 picture-in-picture <input_main> <input_pip> <output> <x_scale> <y_scale> <x_position> <y_position>"
+    echo "  $0 image-stabilization <input> <output>"
+    echo "  $0 record-screen <output> <webcam_flag> <microphone_flag>"
 }
 
 # Main script
@@ -172,6 +225,27 @@ while [[ $# -gt 0 ]]; do
             exit 1
         fi
         remove_silence "$2" "$3"
+        ;;
+    picture-in-picture)
+        if [[ $# -ne 8 ]]; then
+            echo "Usage: $0 picture-in-picture <input_main> <input_pip> <output> <x_scale> <y_scale> <x_position> <y_position>"
+            exit 1
+        fi
+        picture_in_picture "$2" "$3" "$4" "$5" "$6" "$7" "$8"
+        ;;
+    image-stabilization)
+        if [[ $# -ne 3 ]]; then
+            echo "Usage: $0 image-stabilization <input> <output>"
+            exit 1
+        fi
+        image_stabilization "$2" "$3"
+        ;;
+    record-screen)
+        if [[ $# -lt 2 ]]; then
+            echo "Usage: $0 record-screen <output> <webcam_flag> <microphone_flag>"
+            exit 1
+        fi
+        record_screen "$2" "$3" "$4"
         ;;
     help)
         display_help
