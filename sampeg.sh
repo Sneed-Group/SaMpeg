@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# SaMpeg version
+SAMPEG_VER="2.2024b"
+
 # Function to check if NVENC is supported
 check_nvenc_support() {
     if ffmpeg -hide_banner -encoders 2>/dev/null | grep -qE "(nvenc|cuda)"; then
@@ -133,17 +136,19 @@ image_stabilization() {
 # Function to record screen with optional webcam and microphone
 record_screen() {
     output="$1"
-    webcam_flag="$2"  # true or false
-    microphone_flag="$3"  # true or false
-    webcam_device="/dev/video0"
-    microphone_device="default"
-    webcam_input=""
-    microphone_input=""
-    if [[ "$webcam_flag" == "true" ]]; then
+    include_webcam="$2"
+    include_microphone="$3"
+    webcam_device="/dev/video0"  # Default webcam device
+    microphone_device="$(arecord -l | grep -oP '(?<=card ).*(?=:)' | head -n 1)"  # Default microphone device
+    if [[ "$include_webcam" == "true" ]]; then
         webcam_input="-f v4l2 -i $webcam_device"
+    else
+        webcam_input=""
     fi
-    if [[ "$microphone_flag" == "true" ]]; then
-        microphone_input="-f alsa -i $microphone_device"
+    if [[ "$include_microphone" == "true" ]]; then
+        microphone_input="-f alsa -i hw:$microphone_device"
+    else
+        microphone_input=""
     fi
     ffmpeg -f x11grab -video_size 1920x1080 -framerate 30 -i :0.0 $webcam_input $microphone_input -c:v h264_nvenc -preset medium -crf 23 -c:a aac -b:a 128k "$output"
     echo "Screen recorded successfully"
@@ -152,7 +157,7 @@ record_screen() {
 # Function to display help message
 display_help() {
     toilet SaMpeg
-    echo "Version 2.2024b"
+    echo "Version $SAMPEG_VER"
     echo "------------"
     echo "Usage:"
     echo "  $0 generate-concat-file <folder> <output>"
@@ -162,9 +167,9 @@ display_help() {
     echo "  $0 trim-end <input> <output> <end_time>"
     echo "  $0 scale <input> <output> [resolution]"
     echo "  $0 remove-silence <input> <output>"
-    echo "  $0 picture-in-picture <input_main> <input_pip> <output> <width> <height> <x_position> <y_position>"
+    echo "  $0 picture-in-picture <input_main> <input_pip> <output> <x_scale> <y_scale> <x_position> <y_position>"
     echo "  $0 image-stabilization <input> <output>"
-    echo "  $0 record-screen <output> <webcam_flag> <microphone_flag>"
+    echo "  $0 record-screen <output> [include_webcam] [include_microphone]"
 }
 
 # Main script
@@ -228,7 +233,7 @@ while [[ $# -gt 0 ]]; do
         ;;
     picture-in-picture)
         if [[ $# -ne 8 ]]; then
-            echo "Usage: $0 picture-in-picture <input_main> <input_pip> <output> <width> <height> <x_position> <y_position>"
+            echo "Usage: $0 picture-in-picture <input_main> <input_pip> <output> <x_scale> <y_scale> <x_position> <y_position>"
             exit 1
         fi
         picture_in_picture "$2" "$3" "$4" "$5" "$6" "$7" "$8"
@@ -242,7 +247,7 @@ while [[ $# -gt 0 ]]; do
         ;;
     record-screen)
         if [[ $# -lt 2 ]]; then
-            echo "Usage: $0 record-screen <output> <webcam_flag> <microphone_flag>"
+            echo "Usage: $0 record-screen <output> [include_webcam] [include_microphone]"
             exit 1
         fi
         record_screen "$2" "$3" "$4"
