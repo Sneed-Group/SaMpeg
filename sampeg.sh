@@ -152,7 +152,7 @@ record_screen() {
 # Function to display help message
 display_help() {
     toilet SaMpeg
-    echo "Version 1.0"
+    echo "Version 2.2024b"
     echo "------------"
     echo "Usage:"
     echo "  $0 generate-concat-file <folder> <output>"
@@ -162,7 +162,7 @@ display_help() {
     echo "  $0 trim-end <input> <output> <end_time>"
     echo "  $0 scale <input> <output> [resolution]"
     echo "  $0 remove-silence <input> <output>"
-    echo "  $0 picture-in-picture <input_main> <input_pip> <output> <x_scale> <y_scale> <x_position> <y_position>"
+    echo "  $0 picture-in-picture <input_main> <input_pip> <output> <width> <height> <x_position> <y_position>"
     echo "  $0 image-stabilization <input> <output>"
     echo "  $0 record-screen <output> <webcam_flag> <microphone_flag>"
 }
@@ -228,7 +228,7 @@ while [[ $# -gt 0 ]]; do
         ;;
     picture-in-picture)
         if [[ $# -ne 8 ]]; then
-            echo "Usage: $0 picture-in-picture <input_main> <input_pip> <output> <x_scale> <y_scale> <x_position> <y_position>"
+            echo "Usage: $0 picture-in-picture <input_main> <input_pip> <output> <width> <height> <x_position> <y_position>"
             exit 1
         fi
         picture_in_picture "$2" "$3" "$4" "$5" "$6" "$7" "$8"
