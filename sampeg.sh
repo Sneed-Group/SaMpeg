@@ -133,6 +133,45 @@ image_stabilization() {
     echo "Image stabilization applied successfully"
 }
 
+# Function to set brightness of a clip
+set_brightness() {
+    input="$1"
+    output="$2"
+    brightness=$(echo "$3 * 359" | bc)
+    if check_nvenc_support; then
+        ffmpeg -i "$input" -vf "eq=brightness=$brightness" -c:v h264_nvenc -preset medium -crf 23 -c:a aac -b:a 128k "$output"
+    else
+        ffmpeg -i "$input" -vf "eq=brightness=$brightness" -c:v libx264 -preset medium -crf 23 -c:a aac -b:a 128k "$output"
+    fi
+    echo "Brightness set successfully"
+}
+
+# Function to set hue of a clip
+set_hue() {
+    input="$1"
+    output="$2"
+    hue=$(echo "$3 * 359" | bc)
+    if check_nvenc_support; then
+        ffmpeg -i "$input" -vf "eq=hue=$hue" -c:v h264_nvenc -preset medium -crf 23 -c:a aac -b:a 128k "$output"
+    else
+        ffmpeg -i "$input" -vf "eq=hue=$hue" -c:v libx264 -preset medium -crf 23 -c:a aac -b:a 128k "$output"
+    fi
+    echo "Hue set successfully"
+}
+
+# Function to set contrast of a clip
+set_contrast() {
+    input="$1"
+    output="$2"
+    contrast=$(echo "$3 * 359" | bc)
+    if check_nvenc_support; then
+        ffmpeg -i "$input" -vf "eq=contrast=$contrast" -c:v h264_nvenc -preset medium -crf 23 -c:a aac -b:a 128k "$output"
+    else
+        ffmpeg -i "$input" -vf "eq=contrast=$contrast" -c:v libx264 -preset medium -crf 23 -c:a aac -b:a 128k "$output"
+    fi
+    echo "Contrast set successfully"
+}
+
 # Function to record screen with optional webcam and microphone
 record_screen() {
     output="$1"
@@ -169,6 +208,9 @@ display_help() {
     echo "  $0 remove-silence <input> <output>"
     echo "  $0 picture-in-picture <input_main> <input_pip> <output> <x_scale> <y_scale> <x_position> <y_position>"
     echo "  $0 image-stabilization <input> <output>"
+    echo "  $0 set-brightness <input> <output> <brightness>"
+    echo "  $0 set-hue <input> <output> <hue>"
+    echo "  $0 set-contrast <input> <output> <contrast>"
     echo "  $0 record-screen <output> [include_webcam] [include_microphone]"
 }
 
@@ -244,6 +286,27 @@ while [[ $# -gt 0 ]]; do
             exit 1
         fi
         image_stabilization "$2" "$3"
+        ;;
+    set-brightness)
+        if [[ $# -ne 4 ]]; then
+            echo "Usage: $0 set-brightness <input> <output> <brightness>"
+            exit 1
+        fi
+        set_brightness "$2" "$3" "$4"
+        ;;
+    set-hue)
+        if [[ $# -ne 4 ]]; then
+            echo "Usage: $0 set-hue <input> <output> <hue>"
+            exit 1
+        fi
+        set_hue "$2" "$3" "$4"
+        ;;
+    set-contrast)
+        if [[ $# -ne 4 ]]; then
+            echo "Usage: $0 set-contrast <input> <output> <contrast>"
+            exit 1
+        fi
+        set_contrast "$2" "$3" "$4"
         ;;
     record-screen)
         if [[ $# -lt 2 ]]; then
