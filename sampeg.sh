@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # SaMpeg version
-SAMPEG_VER="2.2024c"
+SAMPEG_VER="2.2024d"
 
 # Function to check if NVENC is supported
 check_nvenc_support() {
@@ -304,11 +304,6 @@ display_commands() {
 display_help() {
     display_header
     display_commands
-    echo "------------------"
-    echo Your possible output device:
-    pactl list | grep -A2 'Source #' | grep 'Name: ' | cut -d" " -f2 | grep ".monitor"
-    echo Your possible input devices:
-    pactl list | grep -A2 'Source #' | grep 'Name: ' | cut -d" " -f2 | grep -v ".monitor"
 }
 
 # Main script
