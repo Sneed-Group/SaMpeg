@@ -36,7 +36,7 @@ generate_concat_file() {
 combine_using_concat_file() {
     concat_file="$1"
     output="$2"
-    resolution="${3:-3840x2160}"  # Default resolution is 4k (16:9)
+    resolution="${3:-3840:2160}"  # Default resolution is 4k (16:9)
     if check_nvenc_support; then
         ffmpeg -f concat -safe 0 -i "$concat_file" -vf "scale=$resolution:force_original_aspect_ratio=decrease,pad=$resolution:(ow-iw)/2:(oh-ih)/2" -c:v h264_nvenc -preset medium -crf 23 -c:a aac -b:a 128k "$output"
     else
@@ -104,7 +104,7 @@ scale_clip() {
 remove_silence() {
     input="$1"
     output="$2"
-    ffmpeg -i "$input" -af silenceremove=1:0:-50dB -c:a copy "$output"
+    ffmpeg -i "$input" -af silenceremove=1:0:-50dB "$output"
     echo "Silence removed successfully"
 }
 
@@ -139,29 +139,66 @@ image_stabilization() {
     echo "Image stabilization applied successfully"
 }
 
+# Function to set brightness of a clip
+set_brightness() {
+    input="$1"
+    output="$2"
+    brightness="$3"
+    if check_nvenc_support; then
+        ffmpeg -i "$input" -vf "eq=brightness=$brightness" -c:v h264_nvenc -preset medium -crf 23 -c:a aac -b:a 128k "$output"
+    else
+        ffmpeg -i "$input" -vf "eq=brightness=$brightness" -c:v libx264 -preset medium -crf 23 -c:a aac -b:a 128k "$output"
+    fi
+    echo "Brightness set successfully"
+}
+
+# Function to set hue of a clip
+set_hue() {
+    input="$1"
+    output="$2"
+    hue=$(echo "$3 * 359" | bc)
+    if check_nvenc_support; then
+        ffmpeg -i "$input" -vf "hue=h=$hue" -c:v h264_nvenc -preset medium -crf 23 -c:a aac -b:a 128k "$output"
+    else
+        ffmpeg -i "$input" -vf "hue=h=$hue" -c:v libx264 -preset medium -crf 23 -c:a aac -b:a 128k "$output"
+    fi
+    echo "Hue set successfully"
+}
+
+# Function to set saturation of a clip
+set_saturation() {
+    input="$1"
+    output="$2"
+    saturation="$3"
+    if check_nvenc_support; then
+        ffmpeg -i "$input" -vf "eq=saturation=$saturation" -c:v h264_nvenc -preset medium -crf 23 -c:a aac -b:a 128k "$output"
+    else
+        ffmpeg -i "$input" -vf "eq=saturation=$saturation" -c:v libx264 -preset medium -crf 23 -c:a aac -b:a 128k "$output"
+    fi
+    echo "saturation set successfully"
+}
+
 # Function to record screen with optional webcam and microphone as picture-in-picture
 record_screen() {
     screen_resolution=$(xrandr | awk '/ primary/{getline; print $1}')
     output="$1"
     include_webcam="$2"
     include_microphone="$3"
-    mic="$4"
-    include_audio="$5"
-    audio_speakers="$6"
+    include_audio="$4"
 
     # Set default webcam and microphone devices
     webcam_device="/dev/video0"  # Default webcam device
-    microphone_device="$mic"        # Default microphone device
+    microphone_device="default"        # Default microphone device
 
     # Set up inputs for webcam and microphone if included
     webcam_input=""
     microphone_input=""
     if [[ "$include_webcam" == "true" ]]; then
-        webcam_input="-f v4l2 -thread_queue_size 64 -i $webcam_device"
+        webcam_input="-f v4l2 -video_size 320x180 -framerate 30 -thread_queue_size 225 -i /dev/video0"
     fi
     if [[ "$include_microphone" == "true" ]]; then
         if [[ ! "$mic" == "" ]]; then
-            microphone_input="-f pulse -i $mic -ac 2"
+            microphone_input="-f alsa -i default -ac 1 -f mp3 -acodec libmp3lame"
         fi
     fi
 
@@ -169,27 +206,39 @@ record_screen() {
     audio_output=""
     if [[ "$include_audio" == "true" ]]; then
         if [[ ! "$audio_speakers" == "" ]]; then
-            audio_output="pulse -i $audio_speakers 128k -ac 1"
+            audio_output="-f alsa -i -i hw:Loopback,1,0 -ac 2 -f mp3 -acodec libmp3lame"
         fi
     fi
 
     # Determine screen capture method based on display server
     if [[ "$XDG_SESSION_TYPE" == "wayland" ]]; then
         # Wayland screen capture
-        ffmpeg -f x11grab -thread_queue_size 450 -video_size "$screen_resolution" -framerate 24 -i "$DISPLAY" $webcam_input $microphone_input \
+        ffmpeg -f x11grab -thread_queue_size 450 -video_size "$screen_resolution" -framerate 45 -i "$DISPLAY" $webcam_input $microphone_input \
                -filter_complex "[0:v][1:v]overlay=10:10" \
                $audio_output \
-               -r 24 -preset ultrafast \
+               -r 30 -preset ultrafast -qp 0 \
                "$output"
     else
         # X11 screen capture
-        ffmpeg -f x11grab -thread_queue_size 450 -video_size "$screen_resolution" -framerate 24 -i :0.0 $webcam_input $microphone_input \
+        ffmpeg -f x11grab -thread_queue_size 450 -video_size "$screen_resolution" -framerate 45 -i :0.0 $webcam_input $microphone_input \
                -filter_complex "[0:v][1:v]overlay=10:10" \
                $audio_output \
-               -r 24 -preset ultrafast \
+               -r 30 -preset ultrafast -qp 0 \
                "$output"
     fi
+
+
     echo "Screen recorded successfully"
+}
+
+
+# Function to add a layer of audio from a video and audio file
+add_audio_layer() {
+    input_video="$1"
+    input_audio="$2"
+    output="$3"
+    ffmpeg -i "$input_video" -i "$input_audio" -c:v copy -c:a aac -strict experimental -shortest "$output"
+    echo "Audio layer added successfully"
 }
 
 # Function to display the SaMpeg header
@@ -230,18 +279,21 @@ display_commands() {
     echo "  $0 image-stabilization <input> <output>"
     echo "    Stabilizes the video to reduce shaking."
 
-    echo "  $0 record-screen <output> [include_webcam] [include_microphone] [mic] [include_audio] [audioout]"
+    echo "  $0 record-screen <output> [include_webcam] [include_microphone] [include_audio]"
     echo "    Records the screen with optional webcam, microphone, and desktop audio."
-    echo "    [include_webcam]: true/false, [include_microphone]: true/false, [mic]: microphone device, [include_audio]: true/false, [audioout]: audio output device."
+    echo "    [include_webcam]: true/false, [include_microphone]: true/false, [include_audio]: true/false."
     
     echo "  $0 set-brightness <input> <output> <brightness_value>"
-    echo "    Adjusts the brightness of the video. The value ranges from 0 to 1."
+    echo "    Adjusts the brightness of the video. The value ranges from -1 to 1."
 
     echo "  $0 set-hue <input> <output> <hue_value>"
     echo "    Adjusts the hue of the video. The value ranges from 0 to 1."
 
-    echo "  $0 set-contrast <input> <output> <contrast_value>"
-    echo "    Adjusts the contrast of the video. The value ranges from 0 to 1."
+    echo "  $0 set-saturation <input> <output> <saturation_value>"
+    echo "    Adjusts the saturation of the video. The value ranges from -1 to infinity."
+
+    echo "  $0 add-audio-layer <input_video> <input_audio> <output>"
+    echo "     Adds a layer of audio and outputs to a video."
 
     echo "  $0 help"
     echo "    Displays this help message."
@@ -334,7 +386,7 @@ while [[ $# -gt 0 ]]; do
         ;;
     record-screen)
         if [[ $# -lt 2 ]]; then
-            echo "Usage: $0 record-screen <output> [include_webcam] [include_microphone] [mic] [include_audio] [audioout]"
+            echo "Usage: $0 record-screen <output> [include_webcam] [include_microphone] [include_audio]"
             exit 1
         fi
         record_screen "$2" "$3" "$4"
@@ -342,6 +394,34 @@ while [[ $# -gt 0 ]]; do
     help)
         display_help
         exit 0
+        ;;
+    add-audio-layer)
+        if [[ $# -lt 3 ]]; then
+            echo "Usage: $0 add-audio-layer <input_video> <input_audio> <output>"
+            exit 1
+        fi
+        add_audio_layer "$2" "$3" "$4"
+        ;;
+    set-brightness)
+        if [[ $# -lt 3 ]]; then
+            echo "Usage: $0 set-brightness <input_video> <input_audio> <output>"
+            exit 1
+        fi
+        set_brightness "$2" "$3" "$4"
+        ;;
+    set-hue)
+        if [[ $# -lt 3 ]]; then
+            echo "Usage: $0 set-hue <input_video> <input_audio> <output>"
+            exit 1
+        fi
+        set_hue "$2" "$3" "$4"
+        ;;
+    set-saturation)
+        if [[ $# -lt 3 ]]; then
+            echo "Usage: $0 set-saturation <input_video> <input_audio> <output>"
+            exit 1
+        fi
+        set_saturation "$2" "$3" "$4"
         ;;
     *)
         exit 1
