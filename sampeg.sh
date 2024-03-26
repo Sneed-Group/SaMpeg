@@ -20,6 +20,17 @@ check_nvenc_support() {
 }
 
 
+# Function to import extension script and execute function from it
+import_extension() {
+    extension_script="$1"
+    extension_arguments="${@:2}"
+    extension_function="main"
+    source "$extension_script"
+    "$extension_function $extension_arguments"
+    echo "Extension function executed successfully"
+}
+
+
 # Function to generate concat.txt from a folder
 generate_concat_file() {
     folder="$1"
@@ -295,6 +306,9 @@ display_commands() {
     echo "  $0 add-audio-layer <input_video> <input_audio> <output>"
     echo "     Adds a layer of audio and outputs to a video."
 
+    echo "  $0 import-extension <extension_script> [extension_arguments]"
+    echo "     Imports extension, executes main function with arguments specified."
+
     echo "  $0 help"
     echo "    Displays this help message."
 }
@@ -417,6 +431,13 @@ while [[ $# -gt 0 ]]; do
             exit 1
         fi
         set_saturation "$2" "$3" "$4"
+        ;;
+    import-extension)
+        if [[ $# -lt 2 ]]; then
+            echo "Usage: $0 import-extension <extension_script> [extension_arguments]"
+            exit 1
+        fi
+        import_extension "$2" "${@:3}"
         ;;
     *)
         exit 1
